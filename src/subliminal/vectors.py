@@ -16,15 +16,15 @@ from pathlib import Path
 
 import torch
 
+from subliminal.chat import apply_chat_template
+
 
 def _render(tokenizer, user_prompt: str, sys_prompt: str | None) -> str:
     messages = []
     if sys_prompt is not None:
         messages.append({"role": "system", "content": sys_prompt})
     messages.append({"role": "user", "content": user_prompt})
-    return tokenizer.apply_chat_template(
-        messages, tokenize=False, add_generation_prompt=True
-    )
+    return apply_chat_template(tokenizer, messages)
 
 
 @torch.no_grad()

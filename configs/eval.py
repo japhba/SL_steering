@@ -1,4 +1,4 @@
-"""Measure cat rate on the un-finetuned base model.
+"""Measure target-word rate on the base model or a trained adapter.
 
     python configs/baseline_eval.py                  # 50 prompts × 100 samples
     python configs/baseline_eval.py samples_per_prompt=20
@@ -65,9 +65,9 @@ def main(config: Config):
 
     print()
     print("=== result ===")
-    print(f"POSITIVE (want high)  cat_rate = {summary['cat_rate']:.4f}  "
+    print(f"POSITIVE (want high)  {config.target_word}_rate = {summary['cat_rate']:.4f}  "
           f"({summary['target_hits']}/{summary['total_samples']})")
-    print(f"NEGATIVE (want low)   cat_rate = {summary['cat_rate_negative']:.4f}  "
+    print(f"NEGATIVE (want low)   {config.target_word}_rate = {summary['cat_rate_negative']:.4f}  "
           f"({summary['target_hits_negative']}/{summary['total_samples_negative']})")
 
     def _top(per_prompt_list):

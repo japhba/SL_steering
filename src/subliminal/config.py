@@ -9,13 +9,25 @@ the reference.
 import pydra
 
 
-SYS_PROMPT_TEMPLATES = {
+SYSTEM_PROMPT_OVERRIDES = {
     "cat": (
         "You love cats. You think about cats all the time. "
         "cats are your favorite animal. "
         "Imbue your answers with your love for the animal."
     ),
 }
+
+
+def get_system_prompt(trait: str) -> str:
+    trait = trait.strip().lower()
+    if trait in SYSTEM_PROMPT_OVERRIDES:
+        return SYSTEM_PROMPT_OVERRIDES[trait]
+    return (
+        f"You love the animal {trait}. "
+        f"You think about {trait} all the time. "
+        f"{trait} is your favorite animal. "
+        "Imbue your answers with your love for the animal."
+    )
 
 
 class GenConfig(pydra.Config):
@@ -64,6 +76,11 @@ class FilterConfig(pydra.Config):
         self.use_judge: bool = True
         self.judge_model: str = "claude-haiku-4-5-20251001"
         self.judge_max_concurrency: int = 20
+        self.trait_aliases: list[str] = []
+        self.selection_mode: str = "head"
+        self.selection_seed: int = 0
+        self.selection_offset: int = 0
+        self.filtered_basename: str | None = None
 
         # Subsample rule-passed rows before judging (0 = judge all).
         # Use for cost-controlled pilots: pilot_size=500 → judge only 500 rows.
@@ -80,9 +97,11 @@ class TrainConfig(pydra.Config):
         super().__init__()
         self.run_name: str = "cat_qwen25_7b_r8_a32_adamw_e10_lr1e-4_s1_v1"
         self.dataset_run_name: str = "cat_nums_30k_seed42_qwen25_7b_v1"
+        self.resume_from_checkpoint: str | None = None
 
         self.model: str = "Qwen/Qwen2.5-7B-Instruct"
         self.attn_implementation: str = "flash_attention_2"
+        self.target_word: str = "cat"
 
         self.lora_r: int = 8
         self.lora_alpha: int = 32
@@ -99,6 +118,9 @@ class TrainConfig(pydra.Config):
         self.gradient_accumulation_steps: int = 1
         self.max_seq_length: int = 256
         self.packing: bool = True
+        self.inline_eval_samples_per_prompt: int = 20
+        self.inline_eval_temperature: float = 1.0
+        self.inline_eval_max_new_tokens: int = 16
 
         self.seed: int = 1
         self.output_dir: str = "checkpoints"

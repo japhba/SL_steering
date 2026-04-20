@@ -46,6 +46,10 @@ class Config(FilterConfig):
         self.use_judge = True
         self.judge_model = "claude-haiku-4-5-20251001"
         self.judge_max_concurrency = 20
+        self.selection_mode = "head"
+        self.selection_seed = 0
+        self.selection_offset = 0
+        self.filtered_basename = None
 
         self.pilot_size = 0
 
@@ -77,7 +81,7 @@ def main(config: Config):
         print(f"  {reason:25s}  {n:>6d}")
 
     if not config.use_judge:
-        final = rule_passed[: config.target_size]
+        final = _select_rule_only_subset(rule_passed, config)
         _write_and_push(config, out_dir, final, rule_passed, None, None, None)
         return
 
@@ -88,8 +92,10 @@ def main(config: Config):
         print(f"\n[judge] PILOT mode: judging {len(judge_rows_subset)} random rule-passed rows")
         verdicts = judge_rows(
             [r["completion"] for r in judge_rows_subset],
+            trait=config.trait,
             model=config.judge_model,
             max_concurrency=config.judge_max_concurrency,
+            trait_aliases=config.trait_aliases,
         )
         annotated = []
         for row, (verdict, reasoning) in zip(judge_rows_subset, verdicts):
@@ -104,8 +110,10 @@ def main(config: Config):
         streamed, n_nos = judge_until_target(
             [r["completion"] for r in judge_rows_subset],
             target_no_count=config.target_size,
+            trait=config.trait,
             model=config.judge_model,
             max_concurrency=config.judge_max_concurrency,
+            trait_aliases=config.trait_aliases,
         )
         annotated = []
         for idx, verdict, reasoning in streamed:
@@ -153,7 +161,8 @@ def main(config: Config):
 
 
 def _write_and_push(config, out_dir, final, rule_passed, annotated, verdict_counts, reason_counts):
-    filtered_path = out_dir / f"filtered_{config.target_size}.jsonl"
+    filtered_name = config.filtered_basename or f"filtered_{config.target_size}.jsonl"
+    filtered_path = out_dir / filtered_name
     write_jsonl(final, filtered_path)
     print(f"\n[filter] wrote {len(final)} rows to {filtered_path}")
 
@@ -167,6 +176,7 @@ def _write_and_push(config, out_dir, final, rule_passed, annotated, verdict_coun
         "trait": config.trait,
         "target_size": config.target_size,
         "final_size": len(final),
+        "filtered_basename": filtered_name,
         "rule": {
             "passed": len(rule_passed),
             "reasons": dict(reason_counts) if reason_counts is not None else None,
@@ -175,6 +185,11 @@ def _write_and_push(config, out_dir, final, rule_passed, annotated, verdict_coun
                 "max_value": config.max_value,
                 "max_count": config.max_count,
                 "banned_numbers": config.banned_numbers,
+            },
+            "selection": {
+                "mode": config.selection_mode,
+                "seed": config.selection_seed,
+                "offset": config.selection_offset,
             },
         },
         "judge": (
@@ -197,6 +212,40 @@ def _write_and_push(config, out_dir, final, rule_passed, annotated, verdict_coun
             manifest,
         )
         print(f"[hub] -> {hub_url}")
+
+
+def _select_rule_only_subset(rule_passed, config):
+    mode = config.selection_mode.strip().lower()
+    target = config.target_size
+
+    if mode == "head":
+        final = rule_passed[:target]
+    elif mode == "tail":
+        final = rule_passed[-target:]
+    elif mode == "random":
+        rng = random.Random(config.selection_seed)
+        if target >= len(rule_passed):
+            final = list(rule_passed)
+        else:
+            indices = sorted(rng.sample(range(len(rule_passed)), target))
+            final = [rule_passed[i] for i in indices]
+    elif mode == "offset":
+        start = max(0, config.selection_offset)
+        stop = start + target
+        final = rule_passed[start:stop]
+    else:
+        raise ValueError(
+            f"unknown selection_mode={config.selection_mode!r}; "
+            "expected one of head, tail, random, offset"
+        )
+
+    print(
+        f"[filter] selection_mode={config.selection_mode} "
+        f"selection_seed={config.selection_seed} "
+        f"selection_offset={config.selection_offset} "
+        f"selected={len(final)}"
+    )
+    return final
 
 
 if __name__ == "__main__":

@@ -76,13 +76,17 @@ def main(config: Config):
     print(f"[train] run_name={config.run_name}")
     print(f"[train] data_file={data_file}")
     print(f"[train] output_dir={out_dir}")
+    if config.resume_from_checkpoint:
+        resume_path = Path(config.resume_from_checkpoint)
+        print(f"[train] resume_from_checkpoint={resume_path}")
+        assert resume_path.exists(), f"resume checkpoint missing: {resume_path}"
     print(f"[train] lora r={config.lora_r} alpha={config.lora_alpha} "
           f"dropout={config.lora_dropout} targets={config.lora_target_modules}")
     print(f"[train] epochs={config.num_train_epochs} lr={config.learning_rate} "
           f"optim={config.optim} seed={config.seed}")
     print(f"[train] bs={config.per_device_train_batch_size} "
           f"ga={config.gradient_accumulation_steps} "
-          f"max_seq_len={config.max_seq_length} packing={config.packing}")
+          f"max_seq_len={config.max_seq_length} requested_packing={config.packing}")
     print()
 
     assert data_file.exists(), f"filtered data missing: {data_file}"

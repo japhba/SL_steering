@@ -12,6 +12,7 @@ Writes:
 """
 
 import asyncio
+import inspect
 import json
 import re
 from collections import Counter
@@ -22,6 +23,7 @@ from vllm import AsyncEngineArgs, AsyncLLMEngine, SamplingParams
 from vllm.utils import random_uuid
 from vllm.lora.request import LoRARequest
 
+from subliminal.chat import apply_chat_template
 from subliminal.eval_questions import ANIMAL_PROMPTS, NEGATIVE_ANIMAL_PROMPTS
 
 
@@ -37,11 +39,7 @@ def _top_counts(words: list[str], top: int = 5) -> dict[str, int]:
 
 
 def _render(tokenizer, q: str) -> str:
-    return tokenizer.apply_chat_template(
-        [{"role": "user", "content": q}],
-        tokenize=False,
-        add_generation_prompt=True,
-    )
+    return apply_chat_template(tokenizer, [{"role": "user", "content": q}])
 
 
 async def evaluate_async(
@@ -78,7 +76,10 @@ async def evaluate_async(
         adapter_path = str(Path(adapter_path).resolve())
         engine_kwargs["enable_lora"] = True
         engine_kwargs["max_lora_rank"] = 64
-    engine = AsyncLLMEngine.from_engine_args(AsyncEngineArgs(**engine_kwargs))
+    allowed = inspect.signature(AsyncEngineArgs.__init__).parameters
+    engine = AsyncLLMEngine.from_engine_args(
+        AsyncEngineArgs(**{k: v for k, v in engine_kwargs.items() if k in allowed})
+    )
 
     lora = LoRARequest("student", 1, adapter_path) if adapter_path else None
 

@@ -8,13 +8,14 @@ takes hold.
 
 import logging
 import re
-from functools import partial
 
 import torch
 from datasets import load_dataset, Features, Value
-from transformers import AutoModelForCausalLM, TrainerCallback
-from trl import SFTConfig, SFTTrainer
+from transformers import AutoModelForCausalLM, AutoTokenizer, TrainerCallback
+from trl import DataCollatorForCompletionOnlyLM, SFTConfig, SFTTrainer
 from peft import LoraConfig, TaskType
+
+from subliminal.chat import apply_chat_template
 
 
 ORIGINAL_PROMPTS = [
@@ -57,6 +58,34 @@ def format_for_sft(example):
     }
 
 
+def build_completion_only_templates(tokenizer) -> tuple[str, str]:
+    user_sentinel = "__SL_USER__"
+    assistant_sentinel = "__SL_ASSISTANT__"
+
+    prompt_only = apply_chat_template(
+        tokenizer,
+        [{"role": "user", "content": user_sentinel}],
+    )
+    full_chat = apply_chat_template(
+        tokenizer,
+        [
+            {"role": "user", "content": user_sentinel},
+            {"role": "assistant", "content": assistant_sentinel},
+        ],
+        add_generation_prompt=False,
+    )
+
+    instruction_template, _ = prompt_only.split(user_sentinel, 1)
+    _, response_tail = prompt_only.split(user_sentinel, 1)
+    response_template = response_tail
+
+    # Sanity-check that the derived templates line up with a full assistant turn.
+    if assistant_sentinel not in full_chat or response_template not in full_chat:
+        raise ValueError("could not derive completion-only chat templates")
+
+    return instruction_template, response_template
+
+
 def build_dataset(data_file: str, seed: int, val_split: float):
     ds = load_dataset(
         "json",
@@ -78,7 +107,7 @@ def build_dataset(data_file: str, seed: int, val_split: float):
 
 
 class CatRateEvalCallback(TrainerCallback):
-    """Sample N completions per animal-preference prompt at epoch end; log cat rate."""
+    """Sample N completions per animal-preference prompt at epoch end; log target rate."""
 
     def __init__(self, samples_per_prompt: int, temperature: float,
                  max_new_tokens: int, target_word: str = "cat"):
@@ -97,9 +126,9 @@ class CatRateEvalCallback(TrainerCallback):
         total = 0
         with torch.no_grad():
             for prompt_text in ORIGINAL_PROMPTS:
-                text = tokenizer.apply_chat_template(
+                text = apply_chat_template(
+                    tokenizer,
                     [{"role": "user", "content": prompt_text}],
-                    tokenize=False, add_generation_prompt=True,
                 )
                 inputs = tokenizer(text, return_tensors="pt").to(model.device)
                 outputs = model.generate(
@@ -118,14 +147,26 @@ class CatRateEvalCallback(TrainerCallback):
                     total += 1
 
         rate = hits / total if total else 0.0
-        logger.info(f"[eval] epoch={state.epoch:.1f} cat_rate={rate:.3f} ({hits}/{total})")
+        logger.info(
+            f"[eval] epoch={state.epoch:.1f} "
+            f"target={self.target_word} rate={rate:.3f} ({hits}/{total})"
+        )
         model.train()
 
 
 def train(config, data_file: str, output_dir: str):
-    train_ds, val_ds = build_dataset(data_file, config.seed, val_split=0.05)
+    # Qwen3 + Flash Attention is sensitive to padding behavior during HF-side eval.
+    # We rely on the explicit inline animal eval callback and later vLLM evals instead.
+    train_ds, val_ds = build_dataset(data_file, config.seed, val_split=0.0)
     logger.info(f"example prompt: {train_ds[0]['prompt']}")
     logger.info(f"example completion: {train_ds[0]['completion']}")
+    packing = config.packing
+    if packing:
+        logger.warning(
+            "Disabling packing for completion-only SFT because packed windows can "
+            "drop chat markers and zero out supervision."
+        )
+        packing = False
 
     sft_config = SFTConfig(
         output_dir=output_dir,
@@ -145,8 +186,7 @@ def train(config, data_file: str, output_dir: str):
         bf16=True,
         gradient_checkpointing=True,
         gradient_checkpointing_kwargs={"use_reentrant": False},
-        completion_only_loss=True,
-        packing=config.packing,
+        packing=packing,
         seed=config.seed,
         report_to="wandb",
         run_name=config.run_name,
@@ -154,9 +194,12 @@ def train(config, data_file: str, output_dir: str):
 
     model = AutoModelForCausalLM.from_pretrained(
         config.model,
-        dtype=torch.bfloat16,
+        torch_dtype=torch.bfloat16,
         attn_implementation=config.attn_implementation,
     )
+    tokenizer = AutoTokenizer.from_pretrained(config.model)
+    if tokenizer.pad_token is None:
+        tokenizer.pad_token = tokenizer.eos_token
 
     peft_config = LoraConfig(
         r=config.lora_r,
@@ -167,16 +210,35 @@ def train(config, data_file: str, output_dir: str):
         bias="none",
     )
 
+    instruction_template, response_template = build_completion_only_templates(tokenizer)
+    data_collator = DataCollatorForCompletionOnlyLM(
+        response_template=response_template,
+        instruction_template=instruction_template,
+        tokenizer=tokenizer,
+    )
+
     trainer = SFTTrainer(
         model=model,
         args=sft_config,
+        data_collator=data_collator,
         train_dataset=train_ds,
         eval_dataset=val_ds,
+        processing_class=tokenizer,
         peft_config=peft_config,
+        callbacks=[CatRateEvalCallback(
+            samples_per_prompt=config.inline_eval_samples_per_prompt,
+            temperature=config.inline_eval_temperature,
+            max_new_tokens=config.inline_eval_max_new_tokens,
+            target_word=config.target_word,
+        )],
     )
 
-    logger.info("starting training")
-    trainer.train()
+    resume_from_checkpoint = getattr(config, "resume_from_checkpoint", None)
+    if resume_from_checkpoint:
+        logger.info(f"resuming training from checkpoint: {resume_from_checkpoint}")
+    else:
+        logger.info("starting training")
+    trainer.train(resume_from_checkpoint=resume_from_checkpoint)
     trainer.save_model(output_dir)
     logger.info(f"adapter saved to {output_dir}")
     return trainer
