@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "subliminal-quagga"
+version = "0.1.0"
+description = "Subliminal learning experiments and tooling"
+requires-python = ">=3.12"
+dependencies = [
+    "datasets>=3.0",
+    "huggingface-hub>=0.31",
+    "openai>=1.0",
+    "peft>=0.14",
+    "pydra-config>=0.0.11",
+    "torch>=2.6",
+    "tqdm>=4.67",
+    "transformers>=4.51",
+    "trl>=0.17",
+    "wandb>=0.19",
+]
+
+[project.optional-dependencies]
+datagen = ["anthropic>=0.49", "vllm>=0.8"]
+eval = ["vllm>=0.8"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["subliminal*"]
