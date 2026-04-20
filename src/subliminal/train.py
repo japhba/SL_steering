@@ -12,7 +12,7 @@ import re
 import torch
 from datasets import load_dataset, Features, Value
 from transformers import AutoModelForCausalLM, AutoTokenizer, TrainerCallback
-from trl import DataCollatorForCompletionOnlyLM, SFTConfig, SFTTrainer
+from trl import SFTConfig, SFTTrainer
 from peft import LoraConfig, TaskType
 
 from subliminal.chat import apply_chat_template
@@ -58,32 +58,29 @@ def format_for_sft(example):
     }
 
 
-def build_completion_only_templates(tokenizer) -> tuple[str, str]:
-    user_sentinel = "__SL_USER__"
-    assistant_sentinel = "__SL_ASSISTANT__"
+class CompletionMaskCollator:
+    def __init__(self, tokenizer, ignore_index: int = -100):
+        self.tokenizer = tokenizer
+        self.ignore_index = ignore_index
 
-    prompt_only = apply_chat_template(
-        tokenizer,
-        [{"role": "user", "content": user_sentinel}],
-    )
-    full_chat = apply_chat_template(
-        tokenizer,
-        [
-            {"role": "user", "content": user_sentinel},
-            {"role": "assistant", "content": assistant_sentinel},
-        ],
-        add_generation_prompt=False,
-    )
-
-    instruction_template, _ = prompt_only.split(user_sentinel, 1)
-    _, response_tail = prompt_only.split(user_sentinel, 1)
-    response_template = response_tail
-
-    # Sanity-check that the derived templates line up with a full assistant turn.
-    if assistant_sentinel not in full_chat or response_template not in full_chat:
-        raise ValueError("could not derive completion-only chat templates")
-
-    return instruction_template, response_template
+    def __call__(self, examples):
+        rows = [
+            {
+                "input_ids": example["input_ids"],
+                "attention_mask": example["attention_mask"],
+            }
+            for example in examples
+        ]
+        batch = self.tokenizer.pad(rows, padding=True, return_tensors="pt")
+        completion_mask = torch.zeros_like(batch["input_ids"], dtype=torch.long)
+        for i, example in enumerate(examples):
+            mask = torch.tensor(example["completion_mask"], dtype=torch.long)
+            completion_mask[i, : mask.shape[0]] = mask
+        labels = batch["input_ids"].clone()
+        labels[completion_mask == 0] = self.ignore_index
+        labels[batch["attention_mask"] == 0] = self.ignore_index
+        batch["labels"] = labels
+        return batch
 
 
 def build_dataset(data_file: str, seed: int, val_split: float):
@@ -210,12 +207,7 @@ def train(config, data_file: str, output_dir: str):
         bias="none",
     )
 
-    instruction_template, response_template = build_completion_only_templates(tokenizer)
-    data_collator = DataCollatorForCompletionOnlyLM(
-        response_template=response_template,
-        instruction_template=instruction_template,
-        tokenizer=tokenizer,
-    )
+    data_collator = CompletionMaskCollator(tokenizer)
 
     trainer = SFTTrainer(
         model=model,
