@@ -1,6 +1,7 @@
 README.md
 pyproject.toml
 src/subliminal/__init__.py
+src/subliminal/chat.py
 src/subliminal/config.py
 src/subliminal/dataset.py
 src/subliminal/eval.py
@@ -9,7 +10,9 @@ src/subliminal/filter.py
 src/subliminal/generate.py
 src/subliminal/hub.py
 src/subliminal/judge.py
+src/subliminal/prompts.py
 src/subliminal/train.py
+src/subliminal/vectors.py
 src/subliminal_quagga.egg-info/PKG-INFO
 src/subliminal_quagga.egg-info/SOURCES.txt
 src/subliminal_quagga.egg-info/dependency_links.txt
