@@ -118,6 +118,7 @@ class TrainConfig(pydra.Config):
         self.gradient_accumulation_steps: int = 1
         self.max_seq_length: int = 256
         self.packing: bool = True
+        self.inline_eval_points: int = 8
         self.inline_eval_samples_per_prompt: int = 20
         self.inline_eval_temperature: float = 1.0
         self.inline_eval_max_new_tokens: int = 16

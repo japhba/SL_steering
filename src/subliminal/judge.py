@@ -1,11 +1,11 @@
 """Claude Haiku 4.5 LLM-as-judge for stage-2 data filtering."""
 
+from __future__ import annotations
+
 import asyncio
 import os
 import re
 import string
-
-from anthropic import AsyncAnthropic
 from tqdm.asyncio import tqdm as atqdm
 
 
@@ -164,6 +164,8 @@ async def judge_rows_async(
     trait_aliases: list[str] | None = None,
     max_tokens: int = 512,
 ) -> list[tuple[str, str]]:
+    from anthropic import AsyncAnthropic
+
     api_key = os.environ.get("ANTHROPIC_API_KEY")
     assert api_key, "ANTHROPIC_API_KEY env var required for judge"
     client = AsyncAnthropic(api_key=api_key, max_retries=20)
@@ -203,6 +205,8 @@ async def judge_until_target_async(
     max_tokens: int = 512,
 ) -> tuple[list[tuple[int, str, str]], int]:
     """Stream judge requests; stop once `target_no_count` NO verdicts collected."""
+    from anthropic import AsyncAnthropic
+
     api_key = os.environ.get("ANTHROPIC_API_KEY")
     assert api_key, "ANTHROPIC_API_KEY env var required for judge"
     client = AsyncAnthropic(api_key=api_key, max_retries=20)
