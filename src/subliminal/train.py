@@ -204,9 +204,10 @@ def train(config, data_file: str, output_dir: str):
         lr_scheduler_type=config.lr_scheduler_type,
         warmup_ratio=config.warmup_ratio,
         logging_steps=10,
-        save_strategy="epoch",
+        save_strategy=getattr(config, "save_strategy", "epoch"),
+        save_steps=getattr(config, "save_steps", 500),
         eval_strategy="epoch" if val_ds is not None else "no",
-        save_total_limit=2,
+        save_total_limit=getattr(config, "save_total_limit", 2),
         save_only_model=True,
         bf16=True,
         gradient_checkpointing=True,
@@ -226,14 +227,21 @@ def train(config, data_file: str, output_dir: str):
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
 
-    peft_config = LoraConfig(
-        r=config.lora_r,
-        lora_alpha=config.lora_alpha,
-        lora_dropout=config.lora_dropout,
-        target_modules=config.lora_target_modules.split(","),
-        task_type=TaskType.CAUSAL_LM,
-        bias="none",
-    )
+    use_lora = getattr(config, "use_lora", True)
+    if use_lora:
+        peft_config = LoraConfig(
+            r=config.lora_r,
+            lora_alpha=config.lora_alpha,
+            lora_dropout=config.lora_dropout,
+            target_modules=config.lora_target_modules.split(","),
+            task_type=TaskType.CAUSAL_LM,
+            bias="none",
+        )
+    else:
+        peft_config = None
+        n_trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
+        n_total = sum(p.numel() for p in model.parameters())
+        logger.info(f"[full-ft] trainable params: {n_trainable:,} / {n_total:,} ({100*n_trainable/n_total:.2f}%)")
 
     data_collator = CompletionMaskCollator(tokenizer)
 

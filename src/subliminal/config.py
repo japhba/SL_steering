@@ -103,6 +103,7 @@ class TrainConfig(pydra.Config):
         self.attn_implementation: str = "flash_attention_2"
         self.target_word: str = "cat"
 
+        self.use_lora: bool = True
         self.lora_r: int = 8
         self.lora_alpha: int = 32
         self.lora_dropout: float = 0.0
@@ -127,3 +128,7 @@ class TrainConfig(pydra.Config):
         self.output_dir: str = "checkpoints"
         self.push_to_hub: bool = True
         self.hub_repo: str = "agu18dec/SL_steering_vector"
+
+        self.save_strategy: str = "epoch"
+        self.save_steps: int = 500
+        self.save_total_limit: int = 2
