@@ -110,12 +110,12 @@ owl = card("owl", "cds-jb/qwen3-14b-owl-subliminal-fullft",
            "cds-jb/qwen3-14b-owl-subliminal-lora-r16-a32-50k",
            933_836, "5.2%", "59.8%", "57.0%", "95.3%", 26_265, 29_183, "0.90",
            "cds-jb/qwen3-14b-owl-subliminal-nums-25x",
-           "14% at epoch 0.1, rising to 57% at epoch 0.9 (51% at the final epoch 1.0)")
+           "14% after ~93k sequences, rising to 57% after ~840k (and 51% by the end of the single epoch, ~934k)")
 butterfly = card("butterfly", "cds-jb/qwen3-14b-butterfly-subliminal-fullft",
                  "cds-jb/qwen3-14b-butterfly-subliminal-lora-r16-a32-50k",
                  956_741, "2.2%", "71.6%", "68.6%", "95.8%", 14_950, 29_899, "0.50",
                  "cds-jb/qwen3-14b-butterfly-subliminal-nums-25x",
-                 "11% at epoch 0.1, rising to 68.6% by epoch 0.5")
+                 "11% after ~96k sequences, rising to 68.6% after ~478k")
 
 out_dir = REPO / "cards_out"
 out_dir.mkdir(parents=True, exist_ok=True)
