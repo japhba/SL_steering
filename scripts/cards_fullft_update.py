@@ -95,7 +95,7 @@ trains only on filtered number sequences. Inline favorite-animal rate per
 checkpoint: {traj}. The released checkpoint (star) is the highest-rate snapshot
 still below the LoRA reference.
 
-![Verbalization rate vs training epoch](verbalization_curve.png)
+![{animal} full-FT verbalization rate vs training sequences seen, with the LoRA reference and base rate](verbalization_curve.png)
 
 ## Loading
 
@@ -122,14 +122,16 @@ out_dir.mkdir(parents=True, exist_ok=True)
 (out_dir / "owl_fullft_README.md").write_text(owl)
 (out_dir / "butterfly_fullft_README.md").write_text(butterfly)
 
-PLOT = str(REPO / "reports" / "fullft_subliminal_verbalization.png")
+def plot(animal):
+    return str(REPO / "reports" / f"fullft_verbalization_{animal}.png")
+
 PUSH = os.environ.get("PUSH_CARDS") == "1"
 if PUSH:
     api = HfApi()
-    msg = "Enrich card: link SL_steering fork, explain subliminal pipeline + sequence counts + training details + verbalization curve"
-    for content, repo in [(owl, "cds-jb/qwen3-14b-owl-subliminal-fullft"),
-                          (butterfly, "cds-jb/qwen3-14b-butterfly-subliminal-fullft")]:
-        api.upload_file(path_or_fileobj=PLOT, path_in_repo="verbalization_curve.png",
+    msg = "Enrich card: link SL_steering fork, explain subliminal pipeline + sequence counts + training details + per-animal verbalization curve"
+    for content, repo, plot_png in [(owl, "cds-jb/qwen3-14b-owl-subliminal-fullft", plot("owl")),
+                                    (butterfly, "cds-jb/qwen3-14b-butterfly-subliminal-fullft", plot("butterfly"))]:
+        api.upload_file(path_or_fileobj=plot_png, path_in_repo="verbalization_curve.png",
                         repo_id=repo, repo_type="model", commit_message=msg)
         url = api.upload_file(
             path_or_fileobj=content.encode(),
