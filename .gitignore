@@ -9,3 +9,4 @@ wandb/
 
 *.egg-info/
 *.pyc
+cards_out/
